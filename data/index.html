@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+	<title>Unfollowers</title>
+
+	<link rel="stylesheet" href="/asset?name=style&type=css">
+	<link rel="stylesheet" href="/asset?name=messenger&type=css">
+	<link rel="stylesheet" href="/asset?name=messenger-theme-future&type=css">
+
+	<style>
+	.list a {
+		text-decoration: none;
+	}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="row">
+			<div class="col-sm-12">
+				<h2><a href="/">Return home</a></h2>
+			</div>
+		</div>
+
+		<div class="row">
+			<div class="previous-followers col-md-4 col-sm-6">
+				<h2>Last known followers</h2>
+
+				<ul class="list"></ul>
+			</div>
+
+			<div class="loaded-followers col-md-4 col-sm-6">
+				<h2>Loaded followers</h2>
+
+				<ul class="list"></ul>
+			</div>
+
+			<div class="change col-md-4 col-sm-12">
+				<h2>New followers</h2>
+
+				<ul class="followers"></ul>
+
+				<h2>New unfollowers</h2>
+
+				<ul class="unfollowers"></ul>
+			</div>
+		</div>
+	</div>
+
+	<script src="/asset?name=jquery-2.2.3.min&type=js"></script>
+	<script src="/asset?name=messenger.min&type=js"></script>
+	<script src="/asset?name=messenger-theme-future&type=js"></script>
+	<script>
+		var messenger = Messenger();
+
+		var getResource = function (resource, done) {
+			var xhr = new XMLHttpRequest();
+
+			xhr.open('GET', resource);
+
+			xhr.onload = function () {
+				done(JSON.parse(xhr.responseText));
+			}
+
+			xhr.send();
+		};
+
+		var updateList = function (selector, data) {
+			var list = document.querySelector(selector);
+
+			list.innerHTML = '';
+
+			for (var key in data) {
+				if (!data.hasOwnProperty(key))
+					return;
+
+				var item = data[key];
+
+				var li = document.createElement('li');
+
+				li.innerHTML = `<a style="color: #${item.color}" target="_blank" title="${item.screenName}" href="https://twitter.com/${item.screenName}"><img src="${item.profileIcon}" width="20">&nbsp;${item.displayName}</a>`;
+
+				list.appendChild(li);
+			}
+		};
+
+		var createUserItem = function (user) {
+			var li = document.createElement('li');
+
+			if (user.profile_link_color != null && user.profile_image_url_https != null) {
+				li.innerHTML = `<img src="${user.profile_image_url_https}" width="20">&nbsp;<a style="color: #${user.profile_link_color}" target="_blank" title="${user.screen_name}" href="https://twitter.com/${user.screen_name}">${user.name} (${user.screen_name})</a>`;
+			} else {
+				li.innerHTML = `<a target="_blank" title="${user.screen_name}" href="https://twitter.com/${user.screen_name}">${user.name} (${user.screen_name})</a>`;
+			}
+
+			return li;
+		}
+
+		var addUser = function (place, user) {
+			var user = JSON.parse(user);
+
+			place.appendChild(createUserItem(user));
+		};
+
+		var load = function (id) {
+			var source = new EventSource('/load?token=' + id),
+				loaded = document.querySelector('.loaded-followers .list'),
+				followers = document.querySelector('.followers'),
+				unfollowers = document.querySelector('.unfollowers');
+
+			source.addEventListener('error', function (e) {
+				if (e.readyState == EventSource.CLOSED) {
+					return;
+				}
+
+				messenger.post({
+					message: 'An error occured!',
+					type: 'error'
+				});
+
+				console.error(e.data);
+			});
+
+			source.addEventListener('status', function (e) {
+				messenger.post({
+					message: e.data,
+					hideAfter: 2
+				});
+			});
+
+			source.addEventListener('user', function (e) {
+				addUser(loaded, e.data);
+			});
+
+			source.addEventListener('follow', function (e) {
+				addUser(followers, e.data);
+			});
+
+			source.addEventListener('unfollow', function (e) {
+				addUser(unfollowers, e.data);
+			});
+
+			source.addEventListener('complete', function () {
+				source.close();
+				messenger.post('Update completed');
+			});
+		};
+
+		var token = window.location.search.replace('?', '').split('=')[1]
+
+		load(token);
+
+		getResource('/known?token=' + token , function (known) {
+			if (known == null) {
+				return;
+			}
+
+			var previous = document.querySelector('.previous-followers .list');
+
+			for (var i = 0; i < known.length; i++) {
+				previous.appendChild(createUserItem(known[i]));
+			}
+		});
+	</script>
+</body>
+</html>

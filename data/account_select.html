@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+	<title>Unfollowers</title>
+
+	<link rel="stylesheet" href="/asset?name=style&type=css">
+
+	<style>
+	.list a {
+		text-decoration: none;
+	}
+
+	h2,
+	h3 {
+		margin-top: 15px;
+		margin-bottom: 15px;
+	}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="row">
+			<div class="col-sm-12">
+				<h2>Select the account you wish to view</h2>
+
+				<ol class="accounts"></ol>
+			</div>
+		</div>
+
+		<div class="row recent-unfollowers">
+
+		</div>
+	</div>
+
+	<script src="/asset?name=moment&type=js"></script>
+	<script>
+		var getResource = function (resource, done) {
+			var xhr = new XMLHttpRequest();
+
+			xhr.open('GET', resource);
+
+			xhr.onload = function () {
+				done(JSON.parse(xhr.responseText));
+			}
+
+			xhr.send();
+		};
+
+		var createUserItem = function (user) {
+			var li = document.createElement('li');
+
+			if (user.profile_link_color != null && user.profile_image_url_https != null) {
+				li.innerHTML = `<img src="${user.profile_image_url_https}" width="20">&nbsp;<a style="color: #${user.profile_link_color}" target="_blank" title="${user.screen_name}" href="https://twitter.com/${user.screen_name}">${user.name} (${user.screen_name})</a> - ${moment(user.date).fromNow()}`;
+			} else {
+				li.innerHTML = `<a target="_blank" title="${user.screen_name}" href="https://twitter.com/${user.screen_name}">${user.name} (${user.screen_name})</a>`;
+			}
+
+			return li;
+		}
+
+		var showAccount = function (token) {
+			var accounts = document.querySelector('.recent-unfollowers');
+
+			getResource('/latest?token=' + token.db_id, function (latest) {
+				if (latest.followers == null && latest.unfollowers == null) {
+					return;
+				}
+
+				var div = document.createElement('div');
+				div.classList.add('col-md-6');
+
+				var h2 = document.createElement('h2');
+				h2.innerHTML = token.screen_name;
+
+				div.appendChild(h2);
+
+				if (latest.followers) {
+					var h3 = document.createElement('h3');
+					h3.innerHTML = 'Recent followers';
+					div.appendChild(h3);
+
+					div.innerHTML += '<ul class="followers">';
+
+					for (var i = 0; i < latest.followers.length; i++) {
+						console.log(latest.followers[i]);
+						div.appendChild(createUserItem(latest.followers[i]));
+					}
+
+					div.innerHTML += '</ul>';
+				}
+
+				if (latest.unfollowers) {
+					var h3 = document.createElement('h3');
+					h3.innerHTML = 'Recent unfollowers';
+					div.appendChild(h3);
+
+					div.innerHTML += '<ul class="unfollowers">';
+
+					for (var i = 0; i < latest.unfollowers.length; i++) {
+						console.log(latest.unfollowers[i]);
+						div.appendChild(createUserItem(latest.unfollowers[i]));
+					}
+
+					div.innerHTML += '</ul>';
+				}
+
+				accounts.appendChild(div);
+			});
+		};
+
+		getResource('/tokens', function (tokens) {
+			var accounts = document.querySelector('.accounts');
+
+			if (tokens != null && tokens.length !== 0) {
+				accounts.innerHTML = '<li>' + tokens.map(function (token) {
+					return `<a href="/account?token=${token.db_id}">${token.screen_name}</a>`;
+				}).join('</li><li>') + '</li>';
+			}
+
+			accounts.innerHTML += '<li><a href="/auth">Add account</a></li>';
+
+			tokens.forEach(function (token) {
+				showAccount(token);
+			});
+		});
+	</script>
+</body>
