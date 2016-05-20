@@ -3,13 +3,13 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/ChimeraCoder/anaconda"
-	"github.com/garyburd/go-oauth/oauth"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/skratchdot/open-golang/open"
@@ -23,8 +23,6 @@ const (
 	TwitterConsumer = "iR0mPmyUl4IQX4ebSZGe60UpM"
 	TwitterSecret   = "rFP2xPufsKa0NUWbkVuhLoJIWnhyEfJWiJ0htGKJ1Lnkd8klyr"
 )
-
-var tempCredentials *oauth.Credentials
 
 func startServer() {
 	http.HandleFunc("/", accountSelect)
@@ -43,12 +41,21 @@ func startServer() {
 
 	http.HandleFunc("/asset", assetFetch)
 
+	var customHost config
+	err := db.Get(&customHost, `select value from config
+		where key = 'custom-host'`)
+	if err == sql.ErrNoRows {
+		listenHost = "127.0.0.1:8080"
+	} else {
+		listenHost = customHost.Value
+	}
+
 	go func() {
 		time.Sleep(time.Second)
-		open.Run("http://127.0.0.1:8080")
+		open.Run("http://" + listenHost)
 	}()
 
-	http.ListenAndServe("127.0.0.1:8080", nil)
+	http.ListenAndServe(listenHost, nil)
 }
 
 func min(a, b int) int {
@@ -226,8 +233,8 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 		}
 
 		if !u.IsInDatabase { // New follower, as they were not in database
-			var u user
-			err := db.Get(&u, `select id from users where twitter_id = ?`,
+			var dbUser user
+			err := db.Get(&dbUser, `select id from users where twitter_id = ?`,
 				twitterID)
 
 			if err == sql.ErrNoRows {
@@ -240,11 +247,17 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 
 				follow.Exec(tokenToFetchWith, lastID)
 			} else { // Was already in DB from other user
-				follow.Exec(tokenToFetchWith, u.ID)
+				follow.Exec(tokenToFetchWith, dbUser.ID)
 
 				update.Exec(screenName, displayName, profileIcon,
-					color, u.ID)
+					color, dbUser.ID)
 			}
+
+			w.Write([]byte("event: follow\ndata: "))
+			j, _ := json.Marshal(u.User)
+			w.Write(j)
+			w.Write([]byte("\n\n"))
+			f.Flush()
 		} else {
 			var dbUser user
 			db.Get(&dbUser, `select id from users where twitter_id = ?`,
@@ -310,6 +323,25 @@ func main() {
 	anaconda.SetConsumerSecret(TwitterSecret)
 
 	initDB()
+
+	resetConfig := flag.Bool("resetConfig", false,
+		"Enable to reset configuration options.")
+	resetAll := flag.Bool("resetAll", false,
+		"Enable to reset the database.")
+
+	flag.Parse()
+
+	if *resetAll {
+		db.MustExec(`
+			drop table config;
+			drop table tokens;
+			drop table users;
+			drop table events;`)
+
+		initDB()
+	} else if *resetConfig {
+		db.MustExec(`delete from config`)
+	}
 
 	startServer()
 }

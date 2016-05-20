@@ -4,14 +4,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"github.com/ChimeraCoder/anaconda"
+	"github.com/garyburd/go-oauth/oauth"
 	"log"
 	"net/http"
 	"strconv"
 )
 
+var tempCredentials *oauth.Credentials
+var listenHost string
+
 func authTwitter(w http.ResponseWriter, r *http.Request) {
 	authURL, tempCred, err := anaconda.AuthorizationURL(
-		"http://127.0.0.1:8080/auth/callback")
+		"http://" + listenHost + "/auth/callback")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -56,7 +60,7 @@ func authTwitterCallback(w http.ResponseWriter, r *http.Request) {
 			self.Id)
 	}
 
-	w.Header().Set("Location", "http://127.0.0.1:8080/")
+	w.Header().Set("Location", "http://"+listenHost)
 
 	w.WriteHeader(http.StatusFound)
 

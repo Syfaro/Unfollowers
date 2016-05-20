@@ -42,6 +42,13 @@
 						Use fancy profile displaying.
 					</label>
 				</div>
+
+				<div>
+					<label for="custom-host">
+						<input type="text" id="custom-host" class="custom-host">
+						Custom listen host.
+					</label>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -134,17 +141,29 @@
 			accounts.innerHTML += '<li><a href="/auth">Add account</a></li>';
 
 			getResource('/config', function (config) {
-				tokens.forEach(function (token) {
-					showAccount(token, config['fancy-profile-display'] === undefined ? true : config['fancy-profile-display'] == 'true');
-				});
+				if (tokens != null) {
+					tokens.forEach(function (token) {
+						showAccount(token, config['fancy-profile-display'] === undefined ? true : config['fancy-profile-display'] == 'true');
+					});
+				}
 
 				document.querySelector('.fancy-profile-display').checked = config['fancy-profile-display'] === undefined ? true : config['fancy-profile-display'] == 'true';
+
+				document.querySelector('.custom-host').value = config['custom-host'] === undefined ? '127.0.0.1:8080' : config['custom-host'];
 			});
 		});
 
 		document.querySelector('.fancy-profile-display').addEventListener('change', function (e) {
 			getResource('/config/update?key=fancy-profile-display&value=' + this.checked, function () {});
 			window.location.reload();
+		});
+
+		document.querySelector('.custom-host').addEventListener('keyup', function (e) {
+			if (e.keyCode == 13) {
+				getResource('/config/update?key=custom-host&value=' + this.value, function () {
+					alert('This will take effect after restarting the application.');
+				});
+			}
 		});
 	</script>
 </body>
