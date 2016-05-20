@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -25,8 +24,8 @@ type user struct {
 	ScreenName  string `json:"screen_name" db:"screen_name"`
 	DisplayName string `json:"name" db:"display_name"`
 
-	ProfileIcon nullString `json:"profile_image_url_https" db:"profile_icon"`
-	Color       nullString `json:"profile_link_color" db:"color"`
+	ProfileIcon string `json:"profile_image_url_https" db:"profile_icon"`
+	Color       string `json:"profile_link_color" db:"color"`
 }
 
 type userEvent struct {
@@ -72,29 +71,6 @@ const (
 	TwitterConsumer = "iR0mPmyUl4IQX4ebSZGe60UpM"
 	TwitterSecret   = "rFP2xPufsKa0NUWbkVuhLoJIWnhyEfJWiJ0htGKJ1Lnkd8klyr"
 )
-
-func askUserForTokens() *oauth.Credentials {
-	authURL, tempCred, err := anaconda.AuthorizationURL("oob")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = open.Run(authURL)
-	if err != nil {
-		fmt.Printf("Please open this url:\n%s\n", authURL)
-	}
-
-	fmt.Print("Please enter the code you get: ")
-	var code string
-	fmt.Scanln(&code)
-
-	creds, _, err := anaconda.GetCredentials(tempCred, code)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return creds
-}
 
 var tempCredentials *oauth.Credentials
 
@@ -340,6 +316,8 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 		strconv.Itoa(len(all_ids)) + " followers\n\n"))
 	f.Flush()
 
+	// All known users currently attached to this token.
+	// Starts with current Twitter users, then loads from DB.
 	currentUsers := make(map[int64]userToCheck)
 
 	for i := 0; i < len(all_ids); i += 100 {
@@ -354,7 +332,12 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 		f.Flush()
 
 		for _, follower := range lookup {
-			currentUsers[follower.Id] = userToCheck{follower, true, false}
+			// Okay, store that we got this user currently.
+			currentUsers[follower.Id] = userToCheck{
+				User:             follower,
+				IsStillFollowing: true,
+				IsInDatabase:     false, // Overwritten later
+			}
 
 			j, _ := json.Marshal(follower)
 
@@ -365,6 +348,7 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 		}
 	}
 
+	// Users currently in database attached to user.
 	var storedUsers []user
 
 	db.Select(&storedUsers, `select * from users where id in
@@ -373,16 +357,28 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 
 	for _, u := range storedUsers {
 		if _, ok := currentUsers[u.TwitterID]; ok {
-			currentUsers[u.TwitterID] = userToCheck{currentUsers[u.TwitterID].User, true, true}
+			currentUsers[u.TwitterID] = userToCheck{
+				// Keep full and current Twitter user!
+				User:             currentUsers[u.TwitterID].User,
+				IsStillFollowing: true,
+				IsInDatabase:     true,
+			}
 
 			continue
 		}
 
-		currentUsers[u.TwitterID] = userToCheck{u, false, true}
+		currentUsers[u.TwitterID] = userToCheck{
+			User:             u,
+			IsStillFollowing: false,
+			IsInDatabase:     true,
+		}
 	}
 
-	// Prepared statement to insert a new follower.
-	insert, err := db.Prepare(`insert into users
+	// Yay, transactions!
+	tx := db.MustBegin()
+
+	// Prepared statement to insert a new user.
+	insert, err := tx.Preparex(`insert into users
 		(twitter_id, screen_name, display_name, profile_icon, color)
 		values (?, ?, ?, ?, ?)`)
 	if err != nil {
@@ -390,29 +386,33 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 	}
 
 	// Prepared statement to update an existing follower.
-	update, err := db.Prepare(`update users
+	update, err := tx.Preparex(`update users
 		set screen_name = ?, display_name = ?, profile_icon = ?,
 		color = ? where twitter_id = ?`)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	follow, err := db.Prepare(`insert into events
+	// Prepared statement to register a user followed.
+	follow, err := tx.Preparex(`insert into events
 		(token_id, user_id, event_type) values (?, ?, 'f')`)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	unfollow, err := db.Prepare(`insert into events
+	// Prepared statement to register a user unfollowed.
+	unfollow, err := tx.Preparex(`insert into events
 		(token_id, user_id, event_type) values (?, ?, 'u')`)
 	if err != nil {
 		log.Panic(err)
 	}
 
+	// Go through each user
 	for _, u := range currentUsers {
 		var screenName, displayName, profileIcon, color string
 		var twitterID int64
 
+		// As we could have something from the database
 		switch v := u.User.(type) {
 		case anaconda.User:
 			screenName = v.ScreenName
@@ -424,8 +424,8 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 			screenName = v.ScreenName
 			twitterID = v.TwitterID
 			displayName = v.DisplayName
-			profileIcon = v.ProfileIcon.String
-			color = v.Color.String
+			profileIcon = v.ProfileIcon
+			color = v.Color
 		}
 
 		if !u.IsInDatabase { // New follower, as they were not in database
@@ -455,6 +455,8 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 
 			var checkFollower event
 			var hasNoEvents bool
+
+			// Get what the last event was, so we can check if it changed.
 			err := db.Get(&checkFollower, `select event_type from events t1
 				join (select user_id, max(event_date) event_date
 					from events where token_id = ? group by token_id, user_id) t2
@@ -473,7 +475,7 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 				w.Write([]byte("\n\n"))
 				f.Flush()
 				unfollow.Exec(tokenToFetchWith, dbUser.ID)
-			} else if hasNoEvents || checkFollower.EventType == "u" {
+			} else if hasNoEvents || checkFollower.EventType == "u" { // New follower
 				w.Write([]byte("event: follow\ndata: "))
 				j, _ := json.Marshal(u.User)
 				w.Write(j)
@@ -492,6 +494,9 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 
 	follow.Close()
 	unfollow.Close()
+
+	// Commit the transaction.
+	tx.Commit()
 
 	w.Write([]byte("event: complete\ndata: Complete\n\n"))
 	f.Flush()
