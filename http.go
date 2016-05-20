@@ -1,7 +1,12 @@
 package main
 
 import (
+	"database/sql"
+	"encoding/json"
+	"github.com/ChimeraCoder/anaconda"
+	"log"
 	"net/http"
+	"strconv"
 )
 
 func authTwitter(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +115,8 @@ func configUpdate(w http.ResponseWriter, r *http.Request) {
 			db.Exec(`update config set value = ? where key = ?`, v, k)
 		}
 	}
+
+	w.Write([]byte(k + "=" + v))
 }
 
 func assetFetch(w http.ResponseWriter, r *http.Request) {
