@@ -1,8 +1,50 @@
 package main
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"log"
 	"time"
 )
+
+const SQLTimeFormat = "2006-01-02 15:04:05"
+
+type nullTime struct {
+	Time  time.Time
+	Valid bool
+}
+
+func (nt *nullTime) Scan(value interface{}) error {
+	nt.Time, nt.Valid = value.(time.Time)
+	if nt.Valid {
+		return nil
+	}
+
+	// Results for the time in events seems to come back as a
+	// []uint8 formatted string, instead of a datetime.
+	// ¯\_(ツ)_/¯
+	str, ok := value.([]uint8)
+	if !ok {
+		return nil
+	}
+	t, valid := time.Parse(SQLTimeFormat, string(str))
+	nt.Time = t
+	nt.Valid = valid == nil
+	log.Printf("%s: %s\n", string(str), t)
+	return nil
+}
+
+func (nt nullTime) Value() (driver.Value, error) {
+	if !nt.Valid {
+		return nil, nil
+	}
+
+	return nt.Time, nil
+}
+
+func (nt nullTime) MarshalJSON() ([]byte, error) {
+	return json.Marshal(nt.Time)
+}
 
 // user is a twitter user stored in the database.
 type user struct {
@@ -19,7 +61,7 @@ type user struct {
 // userEvent is a user with the most recent event time.
 type userEvent struct {
 	user
-	EventDate time.Time `db:"event_date" json:"date"`
+	EventDate nullTime `db:"event_date" json:"date"`
 }
 
 // token contains a stored token set and profile data.

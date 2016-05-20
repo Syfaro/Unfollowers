@@ -172,27 +172,27 @@ func followersLatest(w http.ResponseWriter, r *http.Request) {
 	tokenID, _ := strconv.ParseInt(token, 10, 64)
 
 	var unfollowers []userEvent
-	err := db.Select(&unfollowers, `select users.*, t1.event_date from events t1
+	err := db.Select(&unfollowers, `select users.*, t2.event_date from events t1
 				join (select user_id, max(event_date) event_date from
 					events where token_id = ?
 						group by token_id, user_id) t2
 						on t1.user_id = t2.user_id
 				inner join users on t1.user_id = users.id
 				where t1.event_type = 'u'
-				group by users.id order by t1.event_date desc limit 5`, tokenID)
+				group by users.id order by t2.event_date desc limit 5`, tokenID)
 	if err != nil {
 		log.Println(err)
 	}
 
 	var followers []userEvent
-	err = db.Select(&followers, `select users.*, t1.event_date from events t1
+	err = db.Select(&followers, `select users.*, t2.event_date from events t1
 				join (select user_id, max(event_date) event_date from
 					events where token_id = ?
 						group by token_id, user_id) t2
 						on t1.user_id = t2.user_id
 				inner join users on t1.user_id = users.id
 				where t1.event_type = 'f'
-				group by users.id order by t1.event_date desc limit 5`, tokenID)
+				group by users.id order by t2.event_date desc limit 5`, tokenID)
 	if err != nil {
 		log.Println(err)
 	}
