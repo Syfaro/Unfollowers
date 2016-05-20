@@ -246,6 +246,32 @@ func startServer() {
 			w.Write(a)
 		})
 
+	http.HandleFunc("/config",
+		func(w http.ResponseWriter, r *http.Request) {
+			var cfg []config
+			db.Select(&cfg, `select * from config`)
+
+			j, _ := json.Marshal(cfg)
+
+			w.Write(j)
+		})
+
+	http.HandleFunc("/config/update",
+		func(w http.ResponseWriter, r *http.Request) {
+			k, v := r.URL.Query().Get("key"), r.URL.Query().Get("value")
+
+			var cfg config
+			err := db.Get(&cfg, `select * from config where key = ?`, k)
+			if err == sql.ErrNoRows {
+				res, _ := db.Exec(`insert into config (key, value) values (?, ?)`, k, v)
+				lastID, _ := res.LastInsertId()
+
+				db.Get(&cfg, `select * from config where id = ?`, lastID)
+			} else {
+				db.Exec(`update config set value = ? where key = ?`, v, k)
+			}
+		})
+
 	go func() {
 		time.Sleep(time.Second)
 		open.Run("http://127.0.0.1:8080")
