@@ -15,6 +15,8 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
+//go:generate go-bindata data/
+
 var db *sqlx.DB
 
 const (
@@ -25,202 +27,21 @@ const (
 var tempCredentials *oauth.Credentials
 
 func startServer() {
-	http.HandleFunc("/",
-		func(w http.ResponseWriter, r *http.Request) {
-			w.Write(MustAsset("data/account_select.html"))
-		})
+	http.HandleFunc("/", accountSelect)
 
-	http.HandleFunc("/account",
-		func(w http.ResponseWriter, r *http.Request) {
-			w.Write(MustAsset("data/index.html"))
-		})
+	http.HandleFunc("/account", accountView)
+	http.HandleFunc("/known", followersKnown)
+	http.HandleFunc("/latest", followersLatest)
+	http.HandleFunc("/tokens", tokensList)
+	http.HandleFunc("/load", accountLoad)
 
-	http.HandleFunc("/known",
-		func(w http.ResponseWriter, r *http.Request) {
-			token := r.URL.Query().Get("token")
+	http.HandleFunc("/config", configFetch)
+	http.HandleFunc("/config/update", configUpdate)
 
-			var users []user
+	http.HandleFunc("/auth", authTwitter)
+	http.HandleFunc("/auth/callback", authTwitterCallback)
 
-			db.Select(&users, `select users.* from events t1
-				join (select user_id, max(event_date) event_date from
-					events where token_id = ?
-						group by token_id, user_id) t2
-						on t1.user_id = t2.user_id
-				inner join users on t1.user_id = users.id
-				where event_type = 'f' group by users.id`, token)
-
-			j, _ := json.Marshal(users)
-
-			w.Write(j)
-		})
-
-	http.HandleFunc("/latest",
-		func(w http.ResponseWriter, r *http.Request) {
-			token := r.URL.Query().Get("token")
-
-			tokenID, _ := strconv.ParseInt(token, 10, 64)
-
-			var unfollowers []userEvent
-			err := db.Select(&unfollowers, `select users.*, t1.event_date from events t1
-				join (select user_id, max(event_date) event_date from
-					events where token_id = ?
-						group by token_id, user_id) t2
-						on t1.user_id = t2.user_id
-				inner join users on t1.user_id = users.id
-				where t1.event_type = 'u'
-				group by users.id order by t1.event_date desc limit 5`, tokenID)
-			if err != nil {
-				log.Println(err)
-			}
-
-			var followers []userEvent
-			err = db.Select(&followers, `select users.*, t1.event_date from events t1
-				join (select user_id, max(event_date) event_date from
-					events where token_id = ?
-						group by token_id, user_id) t2
-						on t1.user_id = t2.user_id
-				inner join users on t1.user_id = users.id
-				where t1.event_type = 'f'
-				group by users.id order by t1.event_date desc limit 5`, tokenID)
-			if err != nil {
-				log.Println(err)
-			}
-
-			data := struct {
-				Followers   []userEvent `json:"followers"`
-				Unfollowers []userEvent `json:"unfollowers"`
-			}{
-				Followers:   followers,
-				Unfollowers: unfollowers,
-			}
-
-			j, _ := json.Marshal(data)
-
-			w.Write(j)
-		})
-
-	http.HandleFunc("/tokens",
-		func(w http.ResponseWriter, r *http.Request) {
-			var tokens []token
-			db.Select(&tokens, `select * from tokens`)
-
-			j, _ := json.Marshal(tokens)
-
-			w.Write(j)
-		})
-
-	http.HandleFunc("/load",
-		func(w http.ResponseWriter, r *http.Request) {
-			token := r.URL.Query().Get("token")
-
-			tokenID, _ := strconv.ParseInt(token, 10, 64)
-
-			w.Header().Set("Content-type", "text/event-stream")
-
-			load(tokenID, w)
-		})
-
-	http.HandleFunc("/auth",
-		func(w http.ResponseWriter, r *http.Request) {
-			authURL, tempCred, err := anaconda.AuthorizationURL(
-				"http://127.0.0.1:8080/auth/callback")
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			tempCredentials = tempCred
-
-			w.Header().Set("Location", authURL)
-
-			w.WriteHeader(http.StatusFound)
-
-		})
-
-	http.HandleFunc("/auth/callback",
-		func(w http.ResponseWriter, r *http.Request) {
-			verifier := r.URL.Query().Get("oauth_verifier")
-
-			creds, _, err := anaconda.GetCredentials(tempCredentials,
-				verifier)
-
-			api := anaconda.NewTwitterApi(creds.Token, creds.Secret)
-
-			self, err := api.GetSelf(nil)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			var u user
-			err = db.Get(&u, `select id from tokens where twitter_id = ?`,
-				self.Id)
-			if err == sql.ErrNoRows {
-				_, err = db.Exec(`insert into tokens
-					(twitter_id, token, secret, screen_name,
-						display_name) values
-				(?, ?, ?, ?, ?)`, self.Id, creds.Token, creds.Secret,
-					self.ScreenName, self.Name)
-				if err != nil {
-					log.Fatal(err)
-				}
-			} else {
-				db.Exec(`update tokens set
-						screen_name = ?, display_name = ?
-					where twitter_id = ?`, self.ScreenName, self.Name,
-					self.Id)
-			}
-
-			w.Header().Set("Location", "http://127.0.0.1:8080/")
-
-			w.WriteHeader(http.StatusFound)
-
-		})
-
-	http.HandleFunc("/asset",
-		func(w http.ResponseWriter, r *http.Request) {
-			t := r.URL.Query().Get("type")
-			a, err := Asset("data/" + r.URL.Query().Get("name") + "." + t)
-			if err != nil {
-				w.Write([]byte("Unable to find asset."))
-				w.WriteHeader(http.StatusNotFound)
-
-				return
-			}
-
-			switch t {
-			case "js":
-				w.Header().Set("Content-type", "application/javascript")
-			case "css":
-				w.Header().Set("Content-type", "text/css")
-			}
-
-			w.Write(a)
-		})
-
-	http.HandleFunc("/config",
-		func(w http.ResponseWriter, r *http.Request) {
-			var cfg []config
-			db.Select(&cfg, `select * from config`)
-
-			j, _ := json.Marshal(cfg)
-
-			w.Write(j)
-		})
-
-	http.HandleFunc("/config/update",
-		func(w http.ResponseWriter, r *http.Request) {
-			k, v := r.URL.Query().Get("key"), r.URL.Query().Get("value")
-
-			var cfg config
-			err := db.Get(&cfg, `select * from config where key = ?`, k)
-			if err == sql.ErrNoRows {
-				res, _ := db.Exec(`insert into config (key, value) values (?, ?)`, k, v)
-				lastID, _ := res.LastInsertId()
-
-				db.Get(&cfg, `select * from config where id = ?`, lastID)
-			} else {
-				db.Exec(`update config set value = ? where key = ?`, v, k)
-			}
-		})
+	http.HandleFunc("/asset", assetFetch)
 
 	go func() {
 		time.Sleep(time.Second)
