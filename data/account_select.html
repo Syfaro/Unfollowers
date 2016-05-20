@@ -30,8 +30,19 @@
 			</div>
 		</div>
 
-		<div class="row recent-unfollowers">
+		<div class="row recent-unfollowers"></div>
 
+		<div class="row settings">
+			<div class="col-sm-12">
+				<h2>Settings</h2>
+
+				<div>
+					<label for="fancy-profile-display">
+						<input type="checkbox" id="fancy-profile-display" class="fancy-profile-display">
+						Use fancy profile displaying.
+					</label>
+				</div>
+			</div>
 		</div>
 	</div>
 
@@ -49,10 +60,10 @@
 			xhr.send();
 		};
 
-		var createUserItem = function (user) {
+		var createUserItem = function (user, fancyDisplay) {
 			var li = document.createElement('li');
 
-			if (user.profile_link_color != null && user.profile_image_url_https != null) {
+			if (user.profile_link_color != null && user.profile_image_url_https != null && fancyDisplay) {
 				li.innerHTML = `<img src="${user.profile_image_url_https}" width="20">&nbsp;<a style="color: #${user.profile_link_color}" target="_blank" title="${user.screen_name}" href="https://twitter.com/${user.screen_name}">${user.name} (${user.screen_name})</a> - ${moment(user.date).fromNow()}`;
 			} else {
 				li.innerHTML = `<a target="_blank" title="${user.screen_name}" href="https://twitter.com/${user.screen_name}">${user.name} (${user.screen_name})</a>`;
@@ -61,7 +72,7 @@
 			return li;
 		}
 
-		var showAccount = function (token) {
+		var showAccount = function (token, fancyDisplay) {
 			var accounts = document.querySelector('.recent-unfollowers');
 
 			getResource('/latest?token=' + token.db_id, function (latest) {
@@ -86,7 +97,7 @@
 
 					for (var i = 0; i < latest.followers.length; i++) {
 						console.log(latest.followers[i]);
-						div.appendChild(createUserItem(latest.followers[i]));
+						div.appendChild(createUserItem(latest.followers[i], fancyDisplay));
 					}
 
 					div.innerHTML += '</ul>';
@@ -101,7 +112,7 @@
 
 					for (var i = 0; i < latest.unfollowers.length; i++) {
 						console.log(latest.unfollowers[i]);
-						div.appendChild(createUserItem(latest.unfollowers[i]));
+						div.appendChild(createUserItem(latest.unfollowers[i], fancyDisplay));
 					}
 
 					div.innerHTML += '</ul>';
@@ -122,9 +133,18 @@
 
 			accounts.innerHTML += '<li><a href="/auth">Add account</a></li>';
 
-			tokens.forEach(function (token) {
-				showAccount(token);
+			getResource('/config', function (config) {
+				tokens.forEach(function (token) {
+					showAccount(token, config['fancy-profile-display'] === undefined ? true : config['fancy-profile-display'] == 'true');
+				});
+
+				document.querySelector('.fancy-profile-display').checked = config['fancy-profile-display'] === undefined ? true : config['fancy-profile-display'] == 'true';
 			});
+		});
+
+		document.querySelector('.fancy-profile-display').addEventListener('change', function (e) {
+			getResource('/config/update?key=fancy-profile-display&value=' + this.checked, function () {});
+			window.location.reload();
 		});
 	</script>
 </body>

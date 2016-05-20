@@ -93,7 +93,13 @@ func configFetch(w http.ResponseWriter, r *http.Request) {
 	var cfg []config
 	db.Select(&cfg, `select * from config`)
 
-	j, _ := json.Marshal(cfg)
+	configMap := make(map[string]string)
+
+	for _, item := range cfg {
+		configMap[item.Key] = item.Value
+	}
+
+	j, _ := json.Marshal(configMap)
 
 	w.Write(j)
 }
@@ -116,7 +122,10 @@ func configUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Write([]byte(k + "=" + v))
+	db.Get(&cfg, `select * from config where key = ?`, k)
+	j, _ := json.Marshal(cfg)
+
+	w.Write(j)
 }
 
 func assetFetch(w http.ResponseWriter, r *http.Request) {

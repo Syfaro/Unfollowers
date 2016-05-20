@@ -86,10 +86,10 @@
 			}
 		};
 
-		var createUserItem = function (user) {
+		var createUserItem = function (user, fancyDisplay) {
 			var li = document.createElement('li');
 
-			if (user.profile_link_color != null && user.profile_image_url_https != null) {
+			if (user.profile_link_color != null && user.profile_image_url_https != null && fancyDisplay) {
 				li.innerHTML = `<img src="${user.profile_image_url_https}" width="20">&nbsp;<a style="color: #${user.profile_link_color}" target="_blank" title="${user.screen_name}" href="https://twitter.com/${user.screen_name}">${user.name} (${user.screen_name})</a>`;
 			} else {
 				li.innerHTML = `<a target="_blank" title="${user.screen_name}" href="https://twitter.com/${user.screen_name}">${user.name} (${user.screen_name})</a>`;
@@ -98,13 +98,13 @@
 			return li;
 		}
 
-		var addUser = function (place, user) {
+		var addUser = function (place, user, fancyDisplay) {
 			var user = JSON.parse(user);
 
-			place.appendChild(createUserItem(user));
+			place.appendChild(createUserItem(user, fancyDisplay));
 		};
 
-		var load = function (id) {
+		var load = function (id, fancyDisplay) {
 			var source = new EventSource('/load?token=' + id),
 				loaded = document.querySelector('.loaded-followers .list'),
 				followers = document.querySelector('.followers'),
@@ -131,15 +131,15 @@
 			});
 
 			source.addEventListener('user', function (e) {
-				addUser(loaded, e.data);
+				addUser(loaded, e.data, fancyDisplay);
 			});
 
 			source.addEventListener('follow', function (e) {
-				addUser(followers, e.data);
+				addUser(followers, e.data, fancyDisplay);
 			});
 
 			source.addEventListener('unfollow', function (e) {
-				addUser(unfollowers, e.data);
+				addUser(unfollowers, e.data, fancyDisplay);
 			});
 
 			source.addEventListener('complete', function () {
@@ -148,20 +148,24 @@
 			});
 		};
 
-		var token = window.location.search.replace('?', '').split('=')[1]
+		var token = window.location.search.replace('?', '').split('=')[1];
 
-		load(token);
+		getResource('/config', function (config) {
+			var fancyDisplay = config['fancy-profile-display'] === undefined ? true : config['fancy-profile-display'] == 'true';
 
-		getResource('/known?token=' + token , function (known) {
-			if (known == null) {
-				return;
-			}
+			load(token, fancyDisplay);
 
-			var previous = document.querySelector('.previous-followers .list');
+			getResource('/known?token=' + token , function (known) {
+				if (known == null) {
+					return;
+				}
 
-			for (var i = 0; i < known.length; i++) {
-				previous.appendChild(createUserItem(known[i]));
-			}
+				var previous = document.querySelector('.previous-followers .list');
+
+				for (var i = 0; i < known.length; i++) {
+					previous.appendChild(createUserItem(known[i], fancyDisplay));
+				}
+			});
 		});
 	</script>
 </body>
