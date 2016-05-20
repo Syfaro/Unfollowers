@@ -17,56 +17,6 @@ import (
 
 var db *sqlx.DB
 
-type user struct {
-	ID int64 `json:"db_id" db:"id"`
-
-	TwitterID   int64  `json:"id" db:"twitter_id"`
-	ScreenName  string `json:"screen_name" db:"screen_name"`
-	DisplayName string `json:"name" db:"display_name"`
-
-	ProfileIcon string `json:"profile_image_url_https" db:"profile_icon"`
-	Color       string `json:"profile_link_color" db:"color"`
-}
-
-type userEvent struct {
-	user
-	EventDate time.Time `db:"event_date" json:"date"`
-}
-
-type token struct {
-	ID int64 `json:"db_id" db:"id"`
-
-	TwitterID   int64  `json:"id" db:"twitter_id"`
-	ScreenName  string `json:"screen_name" db:"screen_name"`
-	DisplayName string `json:"name" db:"display_name"`
-
-	Token  string `json:"-" db:"token"`
-	Secret string `json:"-" db:"secret"`
-}
-
-type config struct {
-	ID int64 `db:"id"`
-
-	Key   string `db:"key"`
-	Value string `db:"value"`
-}
-
-type event struct {
-	ID int64 `db:"id"`
-
-	TokenID int64 `db:"token_id"`
-	UserID  int64 `db:"user_id"`
-
-	EventType string    `db:"event_type"`
-	EventDate time.Time `db:"event_time"`
-}
-
-type userToCheck struct {
-	User             interface{}
-	IsStillFollowing bool
-	IsInDatabase     bool
-}
-
 const (
 	TwitterConsumer = "iR0mPmyUl4IQX4ebSZGe60UpM"
 	TwitterSecret   = "rFP2xPufsKa0NUWbkVuhLoJIWnhyEfJWiJ0htGKJ1Lnkd8klyr"
@@ -531,46 +481,7 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 func initDB() {
 	db = sqlx.MustOpen("sqlite3", "unfollowers.db")
 
-	db.MustExec(`
-		create table if not exists config (
-			id integer primary key,
-
-			key text unique not null,
-			value text not null
-		);
-
-		create table if not exists tokens (
-			id integer primary key,
-
-			token text not null,
-			secret text not null,
-
-			twitter_id integer not null,
-			screen_name text not null,
-			display_name text not null
-		);
-
-		create table if not exists users (
-			id integer primary key,
-
-			twitter_id integer not null unique,
-			screen_name text not null,
-			display_name text not null,
-
-			profile_icon text,
-			color text
-		);
-
-		create table if not exists events (
-			id integer primary key,
-
-			token_id integer references tokens(id),
-			user_id integer references user(id),
-
-			event_type text check (event_type in ('f', 'u')),
-			event_date datetime default current_timestamp
-		);
-	`)
+	db.MustExec(string(MustAsset("data/db_init.sql")))
 }
 
 func main() {
