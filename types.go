@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql/driver"
 	"encoding/json"
-	"log"
 	"time"
 )
 
@@ -30,7 +29,6 @@ func (nt *nullTime) Scan(value interface{}) error {
 	t, valid := time.Parse(SQLTimeFormat, string(str))
 	nt.Time = t
 	nt.Valid = valid == nil
-	log.Printf("%s: %s\n", string(str), t)
 	return nil
 }
 
