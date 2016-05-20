@@ -132,9 +132,6 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 			log.Panic(err)
 		}
 
-		w.Write([]byte("event: status\ndata: Loaded group of users\n\n"))
-		f.Flush()
-
 		for _, follower := range lookup {
 			// Okay, store that we got this user currently.
 			currentUsers[follower.Id] = userToCheck{
@@ -150,6 +147,10 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 			w.Write([]byte("\n\n"))
 			f.Flush()
 		}
+
+		w.Write([]byte("event: status\ndata: Loaded group of users (" +
+			strconv.Itoa(len(currentUsers)) + " / " + strconv.Itoa(len(all_ids)) + ")\n\n"))
+		f.Flush()
 	}
 
 	// Users currently in database attached to user.
