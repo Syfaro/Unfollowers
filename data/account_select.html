@@ -49,6 +49,12 @@
 						Custom listen host.
 					</label>
 				</div>
+
+				<div>
+					<label for="background-check">
+						Update in background every <input type="text" id="background-check" class="background-check"> hours.
+					</label>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -103,7 +109,6 @@
 					div.innerHTML += '<ul class="followers">';
 
 					for (var i = 0; i < latest.followers.length; i++) {
-						console.log(latest.followers[i]);
 						div.appendChild(createUserItem(latest.followers[i], fancyDisplay));
 					}
 
@@ -118,7 +123,6 @@
 					div.innerHTML += '<ul class="unfollowers">';
 
 					for (var i = 0; i < latest.unfollowers.length; i++) {
-						console.log(latest.unfollowers[i]);
 						div.appendChild(createUserItem(latest.unfollowers[i], fancyDisplay));
 					}
 
@@ -150,6 +154,8 @@
 				document.querySelector('.fancy-profile-display').checked = config['fancy-profile-display'] === undefined ? true : config['fancy-profile-display'] == 'true';
 
 				document.querySelector('.custom-host').value = config['custom-host'] === undefined ? '127.0.0.1:8080' : config['custom-host'];
+
+				document.querySelector('.background-check').value = config['background-check'] === undefined ? '' : config['background-check'];
 			});
 		});
 
@@ -161,6 +167,18 @@
 		document.querySelector('.custom-host').addEventListener('keyup', function (e) {
 			if (e.keyCode == 13) {
 				getResource('/config/update?key=custom-host&value=' + this.value, function () {
+					alert('This will take effect after restarting the application.');
+				});
+			}
+		});
+
+		document.querySelector('.background-check').addEventListener('keyup', function (e) {
+			if (e.keyCode == 13) {
+				if (parseInt(this.value, 10) < 1) {
+					alert('Warning, updating more than once an hour can result in API limits.');
+				}
+
+				getResource('/config/update?key=background-check&value=' + this.value, function () {
 					alert('This will take effect after restarting the application.');
 				});
 			}

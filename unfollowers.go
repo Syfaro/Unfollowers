@@ -99,7 +99,8 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 		log.Fatal(err)
 	}
 
-	w.Write([]byte("event: status\ndata: Stored tokens are valid\n\n"))
+	w.Write([]byte("event: status\ndata: Stored tokens are valid for " +
+		tokenSet.ScreenName + "\n\n"))
 	f.Flush()
 
 	// Update database in case the user changed their profile.
@@ -286,7 +287,7 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 				w.Write([]byte("\n\n"))
 				f.Flush()
 				unfollow.Exec(tokenToFetchWith, dbUser.ID)
-			} else if hasNoEvents || checkFollower.EventType == "u" { // New follower
+			} else if u.IsStillFollowing && (hasNoEvents || checkFollower.EventType == "u") { // New follower
 				w.Write([]byte("event: follow\ndata: "))
 				j, _ := json.Marshal(u.User)
 				w.Write(j)
@@ -309,7 +310,8 @@ func load(tokenToFetchWith int64, w http.ResponseWriter) {
 	// Commit the transaction.
 	tx.Commit()
 
-	w.Write([]byte("event: complete\ndata: Complete\n\n"))
+	w.Write([]byte("event: complete\ndata: Completed " +
+		tokenSet.ScreenName + "\n\n"))
 	f.Flush()
 }
 
@@ -343,6 +345,8 @@ func main() {
 	} else if *resetConfig {
 		db.MustExec(`delete from config`)
 	}
+
+	go backgroundConfigCheck()
 
 	startServer()
 }

@@ -178,7 +178,7 @@ func followersLatest(w http.ResponseWriter, r *http.Request) {
 	var unfollowers []userEvent
 	err := db.Select(&unfollowers, `select users.*, t2.event_date from events t1
 				join (select user_id, max(event_date) event_date from
-					events where token_id = ?
+					events where token_id = ? and event_type = 'u'
 						group by token_id, user_id) t2
 						on t1.user_id = t2.user_id
 				inner join users on t1.user_id = users.id
@@ -191,7 +191,7 @@ func followersLatest(w http.ResponseWriter, r *http.Request) {
 	var followers []userEvent
 	err = db.Select(&followers, `select users.*, t2.event_date from events t1
 				join (select user_id, max(event_date) event_date from
-					events where token_id = ?
+					events where token_id = ? and event_type = 'f'
 						group by token_id, user_id) t2
 						on t1.user_id = t2.user_id
 				inner join users on t1.user_id = users.id
