@@ -82,6 +82,10 @@
 				li.innerHTML = `<a target="_blank" title="${user.screen_name}" href="https://twitter.com/${user.screen_name}">${user.name} (${user.screen_name})</a>`;
 			}
 
+			if (!user.current) {
+				li.innerHTML += ' (old)';
+			}
+
 			return li;
 		}
 
