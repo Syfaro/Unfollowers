@@ -213,3 +213,45 @@ func followersLatest(w http.ResponseWriter, r *http.Request) {
 
 	w.Write(j)
 }
+
+func getAllEvents(tokenID int64, event string) []userEvent {
+	var unfollowers []userEvent
+	err := db.Select(&unfollowers, `select users.*, t2.event_date from events t1
+				join (select user_id, max(event_date) event_date from
+					events where token_id = ? and event_type = ?
+						group by token_id, user_id) t2
+						on t1.user_id = t2.user_id
+				inner join users on t1.user_id = users.id
+				where t1.event_type = ?
+				group by users.id order by t2.event_date desc`, tokenID, event, event)
+	if err != nil {
+		log.Println(err)
+	}
+
+	return unfollowers
+}
+
+func followersAll(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	event := r.URL.Query().Get("event")
+
+	tokenID, _ := strconv.ParseInt(token, 10, 64)
+
+	var data interface{}
+
+	if event == "" {
+		data = struct {
+			Followers   []userEvent `json:"followers"`
+			Unfollowers []userEvent `json:"unfollowers"`
+		}{
+			Followers:   getAllEvents(tokenID, "f"),
+			Unfollowers: getAllEvents(tokenID, "u"),
+		}
+	} else {
+		data = getAllEvents(tokenID, event)
+	}
+
+	j, _ := json.MarshalIndent(data, "", "  ")
+
+	w.Write(j)
+}

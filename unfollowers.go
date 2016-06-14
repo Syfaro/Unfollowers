@@ -30,6 +30,7 @@ func startServer() {
 	http.HandleFunc("/account", accountView)
 	http.HandleFunc("/known", followersKnown)
 	http.HandleFunc("/latest", followersLatest)
+	http.HandleFunc("/all", followersAll)
 	http.HandleFunc("/tokens", tokensList)
 	http.HandleFunc("/load", accountLoad)
 
