@@ -60,6 +60,7 @@ type user struct {
 type userEvent struct {
 	user
 	EventDate nullTime `db:"event_date" json:"date"`
+	LastEvent bool     `db:"current" json:"current"`
 }
 
 // token contains a stored token set and profile data.
